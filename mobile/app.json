@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Retail Intelligence",
+    "slug": "retail-intelligence",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.retailintelligence.app"
+    },
+    "android": {
+      "package": "com.retailintelligence.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0f0f23"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "scheme": "retailintelligence",
+    "extra": {
+      "apiUrl": "http://localhost:5000/api"
+    },
+    "plugins": [
+      "expo-router"
+    ]
+  }
+}

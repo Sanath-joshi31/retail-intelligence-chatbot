@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+*/node_modules/
+web/dist/
+mobile/dist/
+mobile/.expo/
+
+# Python virtual environment and bytecode
+venv/
+*/venv/
+.venv/
+*/.venv/
+__pycache__/
+*/__pycache__/
+*/**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+*/.pytest_cache/
+*/**/.pytest_cache/
+
+# Environment variables & secrets
+.env
+*/.env
+*.env.local
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

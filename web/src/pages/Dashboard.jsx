@@ -11,7 +11,11 @@ import {
   ArrowDownRight,
   MessageSquare,
   BarChart3,
+  CheckCircle2,
+  Bell,
+  X,
 } from 'lucide-react';
+import { io } from 'socket.io-client';
 import {
   LineChart,
   Line,
@@ -33,6 +37,7 @@ const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6'
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
+  const [realtimeAlerts, setRealtimeAlerts] = useState([]);
   const [stats, setStats] = useState({
     revenue: 0,
     orders: 0,
@@ -45,6 +50,22 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchDashboardData();
+
+    // Socket.IO real-time listener for AI Replenishment Alerts
+    let socket;
+    try {
+      const socketUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
+      socket = io(socketUrl, { transports: ['websocket', 'polling'] });
+      socket.on('inventory:alert', (alertData) => {
+        setRealtimeAlerts(prev => [alertData, ...prev.slice(0, 4)]);
+      });
+    } catch (e) {
+      console.warn('Socket connection error:', e);
+    }
+
+    return () => {
+      if (socket) socket.disconnect();
+    };
   }, []);
 
   async function fetchDashboardData() {
@@ -86,11 +107,15 @@ export default function Dashboard() {
   }
 
   function calculateGrowth(dailySales) {
-    if (dailySales.length < 2) return 0;
+    if (!dailySales || dailySales.length < 2) return 0;
     const mid = Math.floor(dailySales.length / 2);
-    const firstHalf = dailySales.slice(0, mid).reduce((s, d) => s + d.revenue, 0) / mid;
-    const secondHalf = dailySales.slice(mid).reduce((s, d) => s + d.revenue, 0) / (dailySales.length - mid);
-    return ((secondHalf - firstHalf) / firstHalf) * 100;
+    const firstHalfSum = dailySales.slice(0, mid).reduce((s, d) => s + (d.revenue || 0), 0);
+    const secondHalfSum = dailySales.slice(mid).reduce((s, d) => s + (d.revenue || 0), 0);
+    const firstHalf = firstHalfSum / (mid || 1);
+    const secondHalf = secondHalfSum / ((dailySales.length - mid) || 1);
+    if (!firstHalf || isNaN(firstHalf)) return 0;
+    const growth = ((secondHalf - firstHalf) / firstHalf) * 100;
+    return isNaN(growth) || !isFinite(growth) ? 0 : growth;
   }
 
   function setMockData() {
@@ -189,10 +214,99 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '1.875rem', fontWeight: 700, marginBottom: '4px' }}>Dashboard</h1>
-        <p style={{ color: 'var(--text-muted)' }}>Welcome to your Retail Intelligence Hub</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <div>
+          <h1 style={{ fontSize: '1.875rem', fontWeight: 700, marginBottom: '4px' }}>Dashboard</h1>
+          <p style={{ color: 'var(--text-muted)' }}>Welcome to your Retail Intelligence Hub</p>
+        </div>
+        <button onClick={fetchDashboardData} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          🔄 Refresh Data
+        </button>
       </div>
+
+      {/* Real-Time AI Agent Replenishment Alerts Banner */}
+      {realtimeAlerts.length > 0 && (
+        <div style={{ marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {realtimeAlerts.map((alt, idx) => (
+            <div key={idx} style={{
+              background: alt.severity === 'critical' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+              border: `1px solid ${alt.severity === 'critical' ? 'rgba(239, 68, 68, 0.4)' : 'rgba(245, 158, 11, 0.4)'}`,
+              borderRadius: 'var(--radius-md)',
+              padding: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '16px',
+              animation: 'slideIn 0.3s ease'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '50%',
+                  background: alt.severity === 'critical' ? '#ef4444' : '#f59e0b',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  <Bell size={18} color="white" />
+                </div>
+                <div>
+                  <h4 style={{ margin: '0 0 4px 0', fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    {alt.title}
+                  </h4>
+                  <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                    {alt.recommendation ? (
+                      <>
+                        Suggested Reorder: <strong>{alt.recommendation.suggestedReorderQuantity} units</strong> |
+                        Lead Time: {alt.recommendation.estimatedLeadTimeDays}d |
+                        Daily Velocity: {alt.recommendation.dailyVelocity}/day
+                      </>
+                    ) : alt.message}
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {alt.recommendation && (
+                  <button
+                    onClick={() => alert(`Replenishment Purchase Order draft created for ${alt.recommendation.suggestedReorderQuantity} units of ${alt.recommendation.productName}!`)}
+                    style={{
+                      padding: '6px 12px',
+                      background: 'var(--primary)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: 'var(--radius-sm)',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <CheckCircle2 size={14} /> Approve Restock
+                  </button>
+                )}
+                <button
+                  onClick={() => setRealtimeAlerts(prev => prev.filter((_, i) => i !== idx))}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    padding: '4px'
+                  }}
+                  title="Dismiss alert"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Stats Grid */}
       <div style={{

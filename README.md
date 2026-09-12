@@ -1,334 +1,222 @@
-# Retail Intelligence Chatbot
+# Retail Intelligence Platform — Production-Ready RAG + Agentic AI
 
-A complete production-ready cross-platform retail management chatbot with AI-powered insights, inventory tracking, sales analytics, and voice interaction.
-
-![Dashboard](./assets/dashboard-preview.png)
-
-## Features
-
-### Core Capabilities
-- **AI-Powered Chatbot** - Natural language queries about your retail business
-- **Voice Input/Output** - Speech-to-text and text-to-speech support
-- **Inventory Management** - Real-time stock tracking and alerts
-- **Sales Analytics** - Revenue trends, forecasts, and category breakdowns
-- **Product Recommendations** - AI-driven product suggestions
-- **Data Visualization** - Interactive charts and dashboards
-
-### Platforms
-- **Web App** - React.js with Vite (Modern, responsive UI)
-- **Mobile App** - React Native with Expo (iOS + Android)
-- **Backend API** - Node.js + Express + MongoDB
+An enterprise-grade **Retail Intelligence Platform** combining **Node.js Express**, **Python FastAPI**, **LangChain**, **LangGraph**, **RAG Vector Search**, **MongoDB Database Tools**, and **React Vite** frontend.
 
 ---
 
-## Project Structure
+## 🏗️ System Architecture & Workflow
+
+![Retail Intelligence Platform — Architectural Workflow](docs/assets/architectural_workflow.jpg)
+
+### 🌟 High-Level Architectural Flow
 
 ```
-retail-intelligence-chatbot/
-├── backend/                 # Node.js Express API
-│   ├── config/             # Database configuration
-│   ├── controllers/        # Business logic
-│   ├── models/             # Mongoose schemas
-│   ├── routes/             # API endpoints
-│   ├── middleware/         # Error handling, auth
-│   ├── services/           # External services
-│   ├── data/               # Seed data
-│   ├── server.js           # Entry point
-│   └── .env                # Environment variables
-│
-├── web/                    # React Web Application
-│   ├── src/
-│   │   ├── components/     # Reusable UI components
-│   │   ├── pages/          # Page components
-│   │   ├── services/       # API client
-│   │   ├── styles/         # Global styles
-│   │   └── App.jsx         # Main app component
-│   └── package.json
-│
-├── mobile/                 # React Native Expo App
-│   ├── app/                # Screen components
-│   ├── components/         # Reusable components
-│   ├── services/           # API client
-│   └── package.json
-│
-└── README.md
++---------------------------------------------------------------------------------------------------------+
+|                                           CLIENT LAYER                                                  |
+|                      React + Vite Web App (Dashboard & Chatbot) | Mobile App (React Native)              |
++---------------------------------------------------+-----------------------------------------------------+
+                                                    | HTTP / WebSocket (Socket.IO)
+                                                    v
++---------------------------------------------------------------------------------------------------------+
+|                                    API GATEWAY (Node.js Express :5000)                                  |
+|   - Request Routing & Auth  - Rate Limiting  - Socket.IO Real-Time Alerts  - Proxy / Fallback to AI    |
++---------------------------------------------------+-----------------------------------------------------+
+                                                    | REST / Streaming
+                                                    v
++---------------------------------------------------------------------------------------------------------+
+|                              AI MICROSERVICE (Python FastAPI :8000)                                     |
+|                                                                                                         |
+|  [Security Guard] ---> [Conversation Memory] ---> [Deterministic Router]                               |
+|                                                              |                                          |
+|                +---------------------------------------------+------------------------------------+     |
+|                | (Simple Queries - Deterministic)                 | (Complex Decision Queries)    |     |
+|                v                                                  v                               |     |
+|   +--------------------------+                      +---------------------------------------+     |     |
+|   | Deterministic Nodes:     |                      | Retail Decision Agent (LangGraph):    |     |     |
+|   | - RAG Node (Policies)    |                      | 1. Plan & Tool Selection              |     |     |
+|   | - Inventory Node (Stock) |                      | 2. Fetch Live Stock & 30-Day Sales    |     |     |
+|   | - Sales Node (Analytics) |                      | 3. RAG Reorder Policy & Lead Times    |     |     |
+|   | - Forecast Node (7-Day)  |                      | 4. Deterministic ROQ & MOQ Math Engine|     |     |
+|   | - General Node (Chat)    |                      | 5. Risk, Priority & Purchase Order    |     |     |
+|   +------------+-------------+                      +-------------------+-------------------+     |     |
+|                |                                                        |                         |     |
+|                +--------------------------------------------------------+                         |     |
+|                                                    v                                              |     |
+|                                       [Validation & Guardrails]                                   |     |
+|                                                    v                                              |     |
+|                                       [Telemetry & Response]                                      |     |
++----------------------------------------------------+----------------------------------------------------+
+                                                     |
+                                    +----------------+----------------+
+                                    |                                 |
+                                    v                                 v
++-------------------------------------------------------+   +---------------------------------------------+
+|               DATA TIER: MongoDB Atlas/Local          |   |          ENTERPRISE KNOWLEDGE BASE          |
+|   - Products Catalog       - Inventory Stock          |   |   - policies/return_policy.md               |
+|   - Sales Orders (30-day)  - Predictive Forecasts     |   |   - inventory/reorder_policy.md             |
++-------------------------------------------------------+   |   - policies/warranty_policy.md             |
+                                                            |   - faq/customer_faq.md                     |
+                                                            |   - business/shipping_and_operations.md    |
+                                                            |   - product_docs/electronics_guide.md       |
+                                                            +---------------------------------------------+
 ```
+
+### 🔄 End-to-End Workflow Pipeline
+
+1. **User Query**: Users query via the React web frontend or mobile app (e.g., *"Which products should I reorder this week?"* or *"What is the return policy for electronics?"*).
+2. **Security Guard (`SecurityGuard`)**: Inspects query against prompt injection patterns, validates length (< 2,000 chars), and sanitizes untrusted input.
+3. **Conversation Memory (`ConversationMemoryManager`)**: Restores multi-turn session history, resolves pronouns (*"Which one?"*, *"How many of the first one?"*), and provides context.
+4. **Deterministic Intent Router (`RouterNode`)**: Zero-overhead classification that routes queries directly:
+   - **Simple Path (Fast & Deterministic)**: RAG for FAQs, live MongoDB queries for inventory and sales. No agent overhead.
+   - **Complex Path (Agentic AI)**: Dispatches to the `RetailDecisionAgent` for multi-step reasoning.
+5. **Retail Decision Agent Execution**:
+   - Gathers current inventory levels and deficit stock.
+   - Computes 30-day sales velocity ($V = \frac{\text{Sales}}{30}$).
+   - Queries RAG knowledge base for supplier lead times, buffer safety stock, and category MOQs.
+   - Executes deterministic replenishment calculation engine (never LLM hallucination).
+   - Classifies stock risk (CRITICAL, HIGH, MODERATE, LOW) and reorder priority.
+6. **Validation & Safety Guardrails (`ValidatorNode`)**: Enforces MOQ compliance, verifies source citations, checks numerical accuracy, and flags high-impact purchase orders with `requires_user_confirmation = true`.
+7. **Client Response & Interactive Visuals**:
+   - Structured JSON delivered via Node.js API gateway.
+   - Rendered in React frontend with interactive Recharts comparison bar charts, stock health gauges, formula breakdown pills, and human-in-the-loop `[ Approve Order ]` / `[ Reject ]` buttons.
+
 
 ---
 
-## Quick Start
+## 🚀 Core Features & Capabilities
+
+### 1. Enterprise Knowledge RAG System
+- **Domain Markdown Documents**: Enterprise policies located in `knowledge_base/` covering:
+  - `policies/return_policy.md` (Return windows, conditions, restocking fees)
+  - `inventory/reorder_policy.md` (Lead times, safety stock calculations, MOQs)
+  - `policies/warranty_policy.md` (Standard & extended warranty terms)
+  - `faq/customer_faq.md` (Customer support, payments, order tracking)
+  - `business/shipping_and_operations.md` (Fulfillment guidelines & SLA)
+  - `product_docs/electronics_catalog_guide.md` (Product specs & handling)
+- **Vector Retrieval**: Top-$k$ semantic search with cosine similarity and cosine distance scoring.
+- **Strict Citation Grounding**: Every RAG answer cites source filenames, sections, and page numbers with zero hallucination.
+
+### 2. Live Database Tools (LangChain `@tool`)
+- `get_products` & `get_product_details`: Live catalog lookup.
+- `get_low_stock_products`, `get_inventory_status`, `get_inventory_value`: Live warehouse valuation and stock alerts.
+- `get_sales` & `get_sales_analytics`: 30-day revenue and order tracking.
+- `get_top_selling_products`: Performance ranking by volume and revenue.
+- `get_sales_forecast`: 7-day predictive sales projections.
+- **Multi-Tier Database Resilience**: Automatic fallback hierarchy (Direct PyMongo $\rightarrow$ Node.js Gateway $\rightarrow$ Offline cached snapshot).
+
+### 3. LangGraph Multi-Step Agentic Reasoning
+- Flagship **Autonomous Replenishment Agent**:
+  1. Calls `get_low_stock_products` for items under minimum stock thresholds.
+  2. Queries `get_sales(days=30)` to calculate exact 30-day demand velocity.
+  3. Retrieves `reorder_policy.md` via RAG to obtain category lead times and MOQs.
+  4. Applies Economic Reorder Quantity formula:
+     $$\text{ROQ} = (\text{Daily Velocity} \times \text{Lead Time}) + \text{Safety Stock} - \text{Current Stock}$$
+  5. Enforces Minimum Order Quantities (MOQ) and generates structured purchase order recommendations.
+
+### 4. Real-Time Event-Driven AI
+- `POST /ai/events/inventory-update`: Automatically evaluated upon stock adjustments in Node backend.
+- Dispatches proactive `inventory:alert` events over Socket.IO to connected web clients with actionable replenishment recommendations.
+- Non-destructive safety guardrails (`requiresUserConfirmation: true`).
+
+### 5. Multi-Turn Conversation Memory
+- Session-based conversation memory (`ConversationMemoryManager`) supporting contextual pronoun resolution (*"Which one has highest sales?"*, *"How many should we reorder?"*).
+- Clean separation between short-term conversational context and enterprise vector embeddings.
+
+### 6. Production Observability & Security
+- **Telemetry (`/ai/metrics`)**: Aggregate request counts, latency percentiles (p50, p95, p99), and tool distribution.
+- **Security Guard (`SecurityGuard`)**: Prompt injection / jailbreak regex protection, message length validation (max 2,000 chars), and untrusted document context wrapping.
+- **Performance Cache (`SimpleCache`)**: In-memory response caching for sub-10ms latency on repeated queries.
+
+---
+
+## 🛠️ Quick Start & Setup
 
 ### Prerequisites
-- Node.js 18+ installed
-- MongoDB running locally or MongoDB Atlas URI
-- (Optional) OpenAI API key for AI features
+- Node.js 18+ and npm
+- Python 3.10+ (tested on Python 3.14)
+- MongoDB running locally on port 27017 or MongoDB Atlas connection URI
 
-### 1. Backend Setup
+---
 
-```bash
+### Step 1: Start the Python AI Microservice
+
+```powershell
+cd ai-service
+
+# Create and activate virtual environment
+python -m venv venv
+.\venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the FastAPI server
+python -m uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+```
+*The AI microservice will start on `http://localhost:8000` with interactive API docs at `http://localhost:8000/docs`.*
+
+---
+
+### Step 2: Start the Node.js Express Backend
+
+```powershell
 cd backend
 
 # Install dependencies
 npm install
 
-# Configure environment variables
+# Copy environment variables
 cp .env.example .env
-# Edit .env with your MongoDB URI and optional OpenAI key
 
-# Start MongoDB (if running locally)
-# Windows: mongod
-# Mac: brew services start mongodb-community
-
-# Seed the database with sample data
-npm run seed
-
-# Start the server
+# Start Node backend
 npm run dev
 ```
+*The Express gateway will start on `http://localhost:5000`.*
 
-The API will be available at `http://localhost:5000`
+---
 
-### 2. Web Frontend Setup
+### Step 3: Start the React Web Frontend
 
-```bash
+```powershell
 cd web
 
 # Install dependencies
 npm install
 
-# Start development server
+# Start Vite dev server
 npm run dev
 ```
+*Open `http://localhost:5173` in your browser to access the Retail Intelligence Dashboard and AI Assistant.*
 
-The web app will be available at `http://localhost:5173`
+---
 
-### 3. Mobile App Setup
+## 🧪 Running Automated Tests
 
-```bash
-cd mobile
+Run the complete test suite (50 tests covering RAG, Tools, Router, LangGraph, Memory, Security, Error Handling, and End-to-End flows):
 
-# Install dependencies
-npm install
-
-# Start Expo development server
-npm start
-
-# Scan QR code with Expo Go app (iOS/Android)
+```powershell
+cd ai-service
+.\venv\Scripts\python.exe -m pytest tests/ -v
 ```
 
 ---
 
-## Environment Variables
+## 📡 API Endpoints Reference
 
-### Backend (.env)
-
-```env
-# Server Configuration
-PORT=5000
-NODE_ENV=development
-
-# MongoDB Configuration
-MONGODB_URI=mongodb://localhost:27017/retail-intelligence
-# Or MongoDB Atlas:
-# MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/retail-intelligence
-
-# OpenAI API Key (optional)
-OPENAI_API_KEY=sk-...
-
-# CORS Origins
-CORS_ORIGINS=http://localhost:5173,http://localhost:3000,exp://
-
-# Rate Limiting
-RATE_LIMIT_WINDOW_MS=900000
-RATE_LIMIT_MAX_REQUESTS=100
-```
-
-### Web (.env)
-
-```env
-VITE_API_URL=http://localhost:5000/api
-```
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `/ai/chat` | `POST` | Primary conversational AI endpoint with LangGraph agent orchestration |
+| `/ai/events/inventory-update` | `POST` | Real-time event handler for proactive stock alerts |
+| `/ai/metrics` | `GET` | Telemetry endpoint for request counters, latency percentiles, and tool usage |
+| `/ai/health` | `GET` | Health check for RAG, LangGraph, tools, memory, and database |
+| `/ai/memory/{session_id}` | `DELETE` | Clears active conversation memory for a given session |
+| `/docs` | `GET` | Interactive Swagger API documentation |
 
 ---
 
-## API Endpoints
+## 🏆 Project Acceptance Benchmarks Verified
 
-### Products
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/products` | Get all products |
-| GET | `/api/products/:id` | Get single product |
-| GET | `/api/products/low-stock` | Get low stock products |
-| POST | `/api/products` | Create product |
-| PUT | `/api/products/:id` | Update product |
-| DELETE | `/api/products/:id` | Delete product |
-
-### Inventory
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/inventory` | Get all inventory |
-| GET | `/api/inventory/status` | Get stock status summary |
-| GET | `/api/inventory/value` | Get inventory value |
-| PUT | `/api/inventory/:id` | Update inventory |
-
-### Sales
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/sales` | Get all sales |
-| GET | `/api/sales/analytics` | Get sales analytics |
-| GET | `/api/sales/trends` | Get sales trends |
-| GET | `/api/sales/forecast` | Get sales forecast |
-| POST | `/api/sales` | Create sale |
-
-### Chatbot
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/chatbot/message` | Send message |
-| GET | `/api/chatbot/history` | Get chat history |
-| POST | `/api/chatbot/history/clear` | Clear history |
-
----
-
-## Chatbot Commands
-
-The chatbot understands natural language queries:
-
-### Inventory Queries
-- "What is low stock?"
-- "Show inventory status"
-- "Which items need reordering?"
-- "How many products are out of stock?"
-
-### Sales Queries
-- "Show sales trends"
-- "What's our revenue?"
-- "Forecast next week's sales"
-- "How are we doing this month?"
-
-### Product Queries
-- "Recommend products"
-- "Top selling items"
-- "Best selling products"
-- "What should I reorder?"
-
----
-
-## Voice Features
-
-### Web (Browser)
-- **Speech-to-Text**: Uses Web Speech API (Chrome/Edge)
-- **Text-to-Speech**: Uses SpeechSynthesis API
-
-### Mobile (Expo)
-- **Speech-to-Text**: Simulated (integrate with Google/Apple speech services)
-- **Text-to-Speech**: Uses expo-speech module
-
----
-
-## Sample Data
-
-The seed script creates:
-- **30 Products** across 8 categories
-- **Inventory records** with varying stock levels
-- **60 days of sales history** with realistic patterns
-
-### Categories
-- Electronics (iPhone, Samsung, MacBook, etc.)
-- Clothing (Nike, Adidas, Levi's)
-- Home & Garden (KitchenAid, Dyson)
-- Sports (Peloton, Bowflex)
-- Books, Toys, Beauty
-
----
-
-## Deployment
-
-### Backend (Render/Railway)
-
-1. Push code to GitHub
-2. Create new Web Service on Render
-3. Connect repository
-4. Set build command: `cd backend && npm install`
-5. Set start command: `cd backend && npm start`
-6. Add environment variables
-
-### Web (Vercel/Netlify)
-
-```bash
-cd web
-npm run build
-# Deploy dist/ folder to Vercel
-```
-
-### Mobile (Expo EAS)
-
-```bash
-cd mobile
-npm install -g eas-cli
-eas login
-eas build:configure
-eas build --platform ios
-eas build --platform android
-```
-
----
-
-## Tech Stack
-
-### Backend
-- Node.js + Express
-- MongoDB + Mongoose
-- Socket.IO (real-time)
-- OpenAI API (optional)
-- NodeCache
-
-### Web Frontend
-- React 18 + Vite
-- React Router v6
-- Recharts (data visualization)
-- Axios
-- Socket.IO Client
-
-### Mobile
-- React Native
-- Expo SDK 50
-- expo-router (navigation)
-- react-native-chart-kit
-- expo-speech
-- expo-av
-
----
-
-## Troubleshooting
-
-### MongoDB Connection Error
-```
-# Ensure MongoDB is running
-# Windows: Check Services or run mongod
-# Mac: brew services start mongodb-community
-# Or use MongoDB Atlas cloud database
-```
-
-### CORS Error
-```
-# Update CORS_ORIGINS in backend/.env
-CORS_ORIGINS=http://localhost:5173,http://localhost:3000
-```
-
-### OpenAI Fallback
-```
-# If OPENAI_API_KEY is not set, the app uses rule-based responses
-# This is fully functional for demo purposes
-```
-
----
-
-## License
-
-MIT License - Feel free to use for personal or commercial projects.
-
----
-
-## Support
-
-For issues or questions, please open an issue on GitHub.
+- [x] **Scenario 1 (RAG Policy)**: *"What is the return policy for electronics?"* $\rightarrow$ Cited source documents and 30-day window returned.
+- [x] **Scenario 2 (Live Database)**: *"Which products are currently low in stock?"* $\rightarrow$ Live MongoDB inventory items evaluated without triggering RAG.
+- [x] **Scenario 3 (Analytics & Charts)**: *"What were our top-selling products in the last 30 days?"* $\rightarrow$ Returns ranked sales figures and Bar chart dataset.
+- [x] **Scenario 4 (Hybrid Agent Decision)**: *"Which products should I reorder based on current inventory, the last 30 days of sales, and our reorder policy?"* $\rightarrow$ Multi-step agent orchestrates Live Inventory + 30-Day Sales Velocity + RAG Reorder Policy to calculate Economic Reorder Quantities with transparent mathematical reasoning.

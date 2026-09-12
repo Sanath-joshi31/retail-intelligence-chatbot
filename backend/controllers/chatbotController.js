@@ -6,9 +6,10 @@ const Sale = require('../models/Sale');
 
 // Initialize OpenAI (optional)
 let openai = null;
-if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'your-openai-api-key-here') {
+const apiKey = process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.trim() : '';
+if (apiKey && apiKey !== 'your-openai-api-key-here') {
   openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
+    apiKey: apiKey,
   });
 }
 
@@ -180,7 +181,7 @@ async function generateRuleBasedResponse(intent, entities) {
       type: 'text',
     },
     low_stock: async () => {
-      const lowStock = await Inventory.find({ quantity: { $lte: '$minStockLevel' } })
+      const lowStock = await Inventory.find({ $expr: { $lte: ['$quantity', '$minStockLevel'] } })
         .populate('product', 'name sku price category')
         .limit(10);
 
@@ -240,7 +241,7 @@ async function generateRuleBasedResponse(intent, entities) {
       const trendPercent = ((secondAvg - firstAvg) / firstAvg) * 100;
 
       return {
-        text: `📈 **Sales Trend **(Last 30 Days)\n\n• Total Revenue: $${totalRevenue.toLocaleString('en-US', { maximumFractionDigits: 2 })}\n• Daily Average: $${avgDaily.toLocaleString('en-US', { maximumFractionDigits: 2 })}\n• Trend: ${trendPercent >= 0 ? '📈' : '📉'} ${Math.abs(trendPercent).toFixed(1)}% ${trendPercent >= 0 ? 'increase' : 'decrease'}\n• Total Orders: ${sales.length}`,
+        text: `📈 **Sales Trend** (Last 30 Days)\n\n• Total Revenue: $${totalRevenue.toLocaleString('en-US', { maximumFractionDigits: 2 })}\n• Daily Average: $${avgDaily.toLocaleString('en-US', { maximumFractionDigits: 2 })}\n• Trend: ${trendPercent >= 0 ? '📈' : '📉'} ${Math.abs(trendPercent).toFixed(1)}% ${trendPercent >= 0 ? 'increase' : 'decrease'}\n• Total Orders: ${sales.length}`,
         type: 'chart',
         chartType: 'line',
         chartData: {
@@ -447,7 +448,7 @@ async function generateRuleBasedResponse(intent, entities) {
       const growth = prevRevenue > 0 ? ((totalRevenue - prevRevenue) / prevRevenue) * 100 : 0;
 
       return {
-        text: `💰 **Revenue Report **(Last 30 Days)\n\n• Total Revenue: $${totalRevenue.toLocaleString('en-US', { maximumFractionDigits: 2 })}\n• Total Orders: ${totalOrders}\n• Average Order Value: $${avgOrder.toLocaleString('en-US', { maximumFractionDigits: 2 })}\n• Growth vs Previous Period: ${growth >= 0 ? '📈' : '📉'} ${Math.abs(growth).toFixed(1)}%`,
+        text: `💰 **Revenue Report** (Last 30 Days)\n\n• Total Revenue: $${totalRevenue.toLocaleString('en-US', { maximumFractionDigits: 2 })}\n• Total Orders: ${totalOrders}\n• Average Order Value: $${avgOrder.toLocaleString('en-US', { maximumFractionDigits: 2 })}\n• Growth vs Previous Period: ${growth >= 0 ? '📈' : '📉'} ${Math.abs(growth).toFixed(1)}%`,
         type: 'data',
         data: {
           totalRevenue,
@@ -612,22 +613,61 @@ exports.sendMessage = async (req, res) => {
     let response;
     let source = 'rule-based';
 
-    // Try AI first if configured, fallback to rule-based
-    if (openai && intent !== 'greeting' && intent !== 'help') {
-      try {
-        const context = await ChatMessage.find({ sessionId })
-          .sort({ createdAt: -1 })
-          .limit(10);
+    // 1. Try Python AI Service first (FastAPI + LangGraph + RAG)
+    const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000/ai';
+    let aiServiceSuccess = false;
 
-        response = await generateAIResponse(message, context);
-        source = 'ai';
-      } catch (aiError) {
-        console.log('AI fallback to rule-based:', aiError.message);
-        response = await generateRuleBasedResponse(intent, entities);
-        source = 'rule-based';
+    try {
+      const aiResponse = await fetch(`${aiServiceUrl}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message,
+          sessionId,
+          platform,
+        }),
+        signal: AbortSignal.timeout(6000),
+      });
+
+      if (aiResponse.ok) {
+        const aiJson = await aiResponse.json();
+        if (aiJson.success && aiJson.data) {
+          response = {
+            text: aiJson.data.text,
+            type: aiJson.data.type || 'text',
+            chartType: aiJson.data.chartType,
+            chartData: aiJson.data.chartData,
+            data: aiJson.data.data,
+            sources: aiJson.data.sources || [],
+            tools_called: aiJson.data.tools_called || [],
+            latency: aiJson.data.latency,
+          };
+          source = 'python-ai-service';
+          aiServiceSuccess = true;
+        }
       }
-    } else {
-      response = await generateRuleBasedResponse(intent, entities);
+    } catch (aiServiceErr) {
+      // Python AI service offline or timed out, log and continue to fallback
+      // console.log('Python AI service fallback:', aiServiceErr.message);
+    }
+
+    // 2. Fallback to OpenAI / Rule-Based engine if Python AI service wasn't reached
+    if (!aiServiceSuccess) {
+      if (openai && intent !== 'greeting' && intent !== 'help') {
+        try {
+          const context = await ChatMessage.find({ sessionId })
+            .sort({ createdAt: -1 })
+            .limit(10);
+
+          response = await generateAIResponse(message, context);
+          source = 'openai-fallback';
+        } catch (aiError) {
+          response = await generateRuleBasedResponse(intent, entities);
+          source = 'rule-based';
+        }
+      } else {
+        response = await generateRuleBasedResponse(intent, entities);
+      }
     }
 
     // Ensure response has all required fields

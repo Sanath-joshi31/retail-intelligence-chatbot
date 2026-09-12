@@ -27,8 +27,8 @@ const chatMessageSchema = new mongoose.Schema({
     responseTime: Number,
     source: {
       type: String,
-      enum: ['ai', 'rule-based', 'cached'],
-      default: 'rule-based',
+      enum: ['ai', 'rule-based', 'cached', 'python-ai-service', 'langgraph-agent', 'openai-fallback'],
+      default: 'python-ai-service',
     },
   },
   platform: {

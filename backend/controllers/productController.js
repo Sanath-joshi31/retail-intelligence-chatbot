@@ -174,7 +174,7 @@ exports.getProductsByCategory = async (req, res) => {
 // Get low stock products
 exports.getLowStockProducts = async (req, res) => {
   try {
-    const lowStock = await Inventory.find({ quantity: { $lte: '$minStockLevel' } })
+    const lowStock = await Inventory.find({ $expr: { $lte: ['$quantity', '$minStockLevel'] } })
       .populate('product')
       .limit(20);
 

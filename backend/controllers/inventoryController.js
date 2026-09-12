@@ -85,6 +85,33 @@ exports.updateInventory = async (req, res) => {
       { new: true, runValidators: true }
     ).populate('product', 'name sku category');
 
+    // Real-time AI Event Trigger & Socket.IO Broadcast
+    const io = req.app.get('io');
+    if (updatedInventory.quantity <= updatedInventory.minStockLevel) {
+      const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000/ai';
+      fetch(`${aiServiceUrl}/events/inventory-update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productId: updatedInventory.product?._id?.toString() || req.params.id,
+          productName: updatedInventory.product?.name || 'Product',
+          sku: updatedInventory.product?.sku || 'N/A',
+          category: updatedInventory.product?.category || 'General',
+          newQuantity: updatedInventory.quantity,
+          minStockLevel: updatedInventory.minStockLevel,
+          reorderPoint: updatedInventory.reorderPoint,
+          warehouse: updatedInventory.warehouse || 'Main',
+        }),
+      })
+      .then(res => res.json())
+      .then(aiAlert => {
+        if (io && aiAlert.alertRequired) {
+          io.emit('inventory:alert', aiAlert);
+        }
+      })
+      .catch(() => {});
+    }
+
     res.json({
       success: true,
       data: updatedInventory,
